@@ -64,19 +64,22 @@ MCP_CAN CAN2(portCAN2); // Définit CS broche 10 pour can2
 void setup(){
     CAN1.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
     CAN2.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
-    pinMode(interruptCAN1, INPUT); // Broche 2 pour l'entrée INT interruption CAN1
+
+    CAN1.init_Mask(0,0,0x07FFFF00);
+    CAN1.init_Filt(0,0,0x03B70000);
+    CAN1.init_Filt(1,0,0x05DA0000);
+    CAN1.init_Filt(2,0,0x06460000);
+    CAN1.init_Filt(3,0,0x06990000);
+
+    attachInterrupt(digitalPinToInterrupt(interruptCAN1),CAN1_INTERRUPT,FALLING); // Mise en place de l'interruption en cas de données sur le CAN1 
+
     if(hasEngTemp && hasExtTemp) {
       beginCycleTimeMS=millis();
     }
 }
 
-void loop(){
-    // Gestion du cycle d'affichage : Remise à 0 si on est à 2xdurée du cycle
-    if(beginCycleTimeMS + 2*CycleDurationMS < millis() && hasEngTemp && hasExtTemp) {
-          beginCycleTimeMS=millis();
-    }
-
-    if(!digitalRead(2)) {// If pin 2 is low, read receive buffer
+void CAN1_INTERRUPT()
+{
         CAN1.readMsgBuf(&len, rxBuf); // Lire les données: len = longueur des données, rxBuf = data des données        
         rxId = CAN1.getCanId(); // Récupère l'identifiant du message
         
@@ -96,10 +99,15 @@ void loop(){
         // Envoyer les données Climatisation
         if(rxId == 0x699 && hasClim ){
             CAN2.sendMsgBuf(0x31B, 0, 8, rxBuf); // On ne cherche pas, on envoie au MediaNav.
-        }
+        }  
+}
+
+void loop(){
+    // Gestion du cycle d'affichage : Remise à 0 si on est à 2xdurée du cycle
+    if(beginCycleTimeMS + 2*CycleDurationMS < millis() && hasEngTemp && hasExtTemp) {
+          beginCycleTimeMS=millis();
     }
-    
-    
+
     if((beginCycleTimeMS + CycleDurationMS > millis() && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
       newTemp = engTemp; // La nouvelle température est celle du moteur.
     } else if((beginCycleTimeMS + CycleDurationMS < millis() && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
