@@ -9,8 +9,8 @@
   Pin 4      :                          Pin 5 (PMW): CAN1
   Pin 6 (PMW):                          Pin 7      :
   Pin 8      :                          Pin 9 (PMW):
-  Pin 10(PMW): CAN2                     Pin 11(PWM):
-  Pin 12     :                          Pin 13     :
+  Pin 10(PMW): CAN2                     Pin 11(PWM): CAN SPI MOSI (SI sur cartes CAN)
+  Pin 12     : CAN SPI MISO (SO sur CAN)Pin 13     : CAN SPI CLOCK (SCK sur cartes CAN)
   Pin 14 A0  :                          Pin 15 A1  :
   Pin 16 A2  :                          Pin 17 A3  :
   Pin 18 A4  :                          Pin 19 A5  : 
@@ -49,29 +49,42 @@ unsigned long runningCycleTimeMS = 0;
 // Variables liées à l'affichage des températures.
 unsigned int temp = 0x0;
 unsigned int newTemp= 0x0;
-unsigned int engTemp = 0x0;
-unsigned int extTemp = 0x0;
+volatile unsigned int engTemp = 0x0;
+volatile unsigned int extTemp = 0x0;
 bool refreshTemp = false;
 
 // Variables liées au CAN
-unsigned char len = 0;
-long unsigned int rxId;
-unsigned char rxBuf[8];
 unsigned char stmp[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // Modèle de message
 MCP_CAN CAN1(portCAN1); // Définit CS broche 5 pour can1
 MCP_CAN CAN2(portCAN2); // Définit CS broche 10 pour can2
 
 void setup(){
+    byte counter=0;
+    
     CAN1.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
     CAN2.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
 
     CAN1.init_Mask(0,0,0x07FFFF00);
-    CAN1.init_Filt(0,0,0x03B70000);
-    CAN1.init_Filt(1,0,0x05DA0000);
-    CAN1.init_Filt(2,0,0x06460000);
-    CAN1.init_Filt(3,0,0x06990000);
+    if (hasExtTemp) {    
+      CAN1.init_Filt(counter,0,0x03B70000);
+      counter++;
+    }
+    if (hasEngTemp) {    
+      CAN1.init_Filt(counter,0,0x05DA0000);
+      counter++;
+    }
+    if (hasEco2) {    
+      CAN1.init_Filt(counter,0,0x06460000);
+      counter++;
+    }
+    if (hasClim) {    
+      CAN1.init_Filt(counter,0,0x06990000);
+      counter++;
+    }
 
     attachInterrupt(digitalPinToInterrupt(interruptCAN1),CAN1_INTERRUPT,FALLING); // Mise en place de l'interruption en cas de données sur le CAN1 
+    attachInterrupt(digitalPinToInterrupt(interruptCAN2),CAN2_INTERRUPT,FALLING); // Mise en place de l'interruption en cas de données sur le CAN2
+
 
     if(hasEngTemp && hasExtTemp) {
       beginCycleTimeMS=millis();
@@ -80,6 +93,10 @@ void setup(){
 
 void CAN1_INTERRUPT()
 {
+        unsigned char len = 0;
+        unsigned char rxBuf[8];
+        long unsigned int rxId;
+
         CAN1.readMsgBuf(&len, rxBuf); // Lire les données: len = longueur des données, rxBuf = data des données        
         rxId = CAN1.getCanId(); // Récupère l'identifiant du message
         
@@ -100,6 +117,17 @@ void CAN1_INTERRUPT()
         if(rxId == 0x699 && hasClim ){
             CAN2.sendMsgBuf(0x31B, 0, 8, rxBuf); // On ne cherche pas, on envoie au MediaNav.
         }  
+}
+
+void CAN2_INTERRUPT()
+{
+        unsigned char len = 0;
+        unsigned char rxBuf[8];
+        long unsigned int rxId;
+
+        CAN2.readMsgBuf(&len, rxBuf); // Lire les données: len = longueur des données, rxBuf = data des données        
+        rxId = CAN2.getCanId(); // Récupère l'identifiant du message
+        
 }
 
 void loop(){
