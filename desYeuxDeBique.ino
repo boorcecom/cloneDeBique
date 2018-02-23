@@ -75,7 +75,7 @@ void CAN1_INTERRUPT()
 
         Serial.print("CAN-V : CANID - ");
         Serial.print(rxId, HEX);
-        Serial.print(", CANDATA -"");
+        Serial.print(", CANDATA -");
         for(byte i=0; i<len; i++) {
           Serial.print(rxBuf[i], HEX);
           Serial.print(" ");
@@ -95,7 +95,7 @@ void CAN2_INTERRUPT()
         
         Serial.print("CAN-M : CANID - ");
         Serial.print(rxId, HEX);
-        Serial.print(", CANDATA -"");
+        Serial.print(", CANDATA -");
         for(byte i=0; i<len; i++) {
           Serial.print(rxBuf[i], HEX);
           Serial.print(" ");
