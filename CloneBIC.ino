@@ -1,11 +1,15 @@
 #include <mcp_can.h>
 
-
 /*****************************************************************************
+ *          Clone de bique !
+ *          Application Arduino bridge CAN : 
+ *          spécifique pour CAN Véhicule + CAN multimédia.
+ *          
+******************************************************************************
  Mapping des Arduino (ici Nano et Mini Pro)
 ******************************************************************************
   Pin 0 (RX) :                          Pin 1 (TX) : 
-  Pin 2      : Interruption CAN1        Pin 3 (PMW): Interruption CAN2 (non uilisé)
+  Pin 2      : Interruption CAN1        Pin 3 (PMW): Interruption CAN2 
   Pin 4      :                          Pin 5 (PMW): CAN1
   Pin 6 (PMW):                          Pin 7      :
   Pin 8      :                          Pin 9 (PMW):
@@ -14,6 +18,16 @@
   Pin 14 A0  :                          Pin 15 A1  :
   Pin 16 A2  :                          Pin 17 A3  :
   Pin 18 A4  :                          Pin 19 A5  : 
+******************************************************************************
+  Pour le CAN1 : Le CANH est reliée au port 6 de l'ODB2
+  Pour le CAN1 : Le CANL est reliée au port 14 de l'ODB2
+  Pour le CAN2 : Le CANH est reliée au port 13 de l'ODB2
+  Pour le CAN2 : Le CANL est reliée au port 12 de l'ODB2
+  
+  L'alimentation (/!\ entre 13 et 15v ) via un régulateur pour abaisser à
+  8-12v est connecté aux broches 16 (+power) 4 et  5 (GND)
+  
+  
 */
 
 /* Section paramétrage */
