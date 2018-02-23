@@ -78,7 +78,7 @@ void setup(){
     CAN1.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
     CAN2.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
 
-    CAN1.init_Mask(0,0,0x07FFFF00);
+/*    CAN1.init_Mask(0,0,0x07FFFF00);
     if (hasExtTemp) {    
       CAN1.init_Filt(counter,0,0x03B70000);
       counter++;
@@ -94,7 +94,7 @@ void setup(){
     if (hasClim) {    
       CAN1.init_Filt(counter,0,0x06990000);
       counter++;
-    }
+    }*/ // Désactivation des masques... cela ne semble pas fonctionner...
 
     attachInterrupt(digitalPinToInterrupt(interruptCAN1),CAN1_INTERRUPT,FALLING); // Mise en place de l'interruption en cas de données sur le CAN1 
     attachInterrupt(digitalPinToInterrupt(interruptCAN2),CAN2_INTERRUPT,FALLING); // Mise en place de l'interruption en cas de données sur le CAN2
