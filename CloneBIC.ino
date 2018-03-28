@@ -133,6 +133,10 @@ void loop(){
           beginCycleTimeMS=millis();
     }
 
+    if(!digitalRead(interruptCAN1)) {
+      CAN1_INTERRUPT();
+    }
+ 
     if((beginCycleTimeMS + CycleDurationMS > millis() && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
       newTemp = engTemp; // La nouvelle température est celle du moteur.
     } else if((beginCycleTimeMS + CycleDurationMS < millis() && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
