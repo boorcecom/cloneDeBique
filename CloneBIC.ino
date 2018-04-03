@@ -63,8 +63,8 @@ unsigned long runningCycleTimeMS = 0;
 // Variables liées à l'affichage des températures.
 unsigned int temp = 0x0;
 unsigned int newTemp= 0x0;
-volatile unsigned int engTemp = 0x0;
-volatile unsigned int extTemp = 0x0;
+unsigned int engTemp = 0x0;
+unsigned int extTemp = 0x0;
 bool refreshTemp = false;
 
 // Variables liées au CAN
@@ -77,11 +77,6 @@ void setup(){
     
     CAN1.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
     CAN2.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
-
-// Ne fonctionne pas :(
-//    attachInterrupt(digitalPinToInterrupt(interruptCAN1),CAN1_INTERRUPT,FALLING); // Mise en place de l'interruption en cas de données sur le CAN1 
-//    attachInterrupt(digitalPinToInterrupt(interruptCAN2),CAN2_INTERRUPT,FALLING); // Mise en place de l'interruption en cas de données sur le CAN2
-
 
     if(hasEngTemp && hasExtTemp) {
       beginCycleTimeMS=millis();
