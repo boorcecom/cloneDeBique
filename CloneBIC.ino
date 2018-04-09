@@ -121,7 +121,8 @@ void menuConfig(){
   EEPROM.write(1,writeData);
   EEPROM.write(2,0);
   Serial.println("Configuration saved, running in BIC mode now");
-  Serial.flush();  
+  Serial.flush();
+  Serial.read();  
 }
 
 bool serialSelectableOption(char *question, bool actualValue) {
@@ -254,7 +255,6 @@ void checkCAN2() // Non utilisé pour le moment !
         unsigned char len = 0;
         unsigned char rxBuf[8];
         long unsigned int rxId;
-
         CAN2.readMsgBuf(&len, rxBuf); // Lire les données: len = longueur des données, rxBuf = data des données        
         rxId = CAN2.getCanId(); // Récupère l'identifiant du message
         
@@ -267,7 +267,6 @@ void loop(){
      Serial.flush();
      menuConfig();
    }
- 
     if(currentMillis<=oldMillis) { // gestion de l'overflow de la fonction millis() : On réinitialise aux valeurs par défaut les compteurs temps.
       oldMillis=millis();
       currentMillis = millis();
