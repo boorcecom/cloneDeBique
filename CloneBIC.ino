@@ -80,26 +80,7 @@ void setup(){
     
     CAN1.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
     CAN2.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
-   loadConfiguration();
-   configureInterface();
-}
-
-void configureInterface()
-{
-   Serial.flush();
-   Serial.println("CloneDeBique serial configuration interface.");
-   Serial.println("Press any key on in next 5s to configure.");
-   unsigned long initSerialWait = millis();
-   unsigned long serialWaitMillis= millis();
-   while((serialWaitMillis-initSerialWait)<5000) {
-     if(Serial.available()>0) {
-       byte tempo=Serial.read();
-       Serial.flush();
-       menuConfig();
-       break;
-     }
-   }
-
+    loadConfiguration();
 }
 
 void menuConfig(){
@@ -281,6 +262,12 @@ void checkCAN2() // Non utilisé pour le moment !
 */
 void loop(){
   
+   if(Serial.available()>0) {
+     Serial.read();
+     Serial.flush();
+     menuConfig();
+   }
+ 
     if(currentMillis<=oldMillis) { // gestion de l'overflow de la fonction millis() : On réinitialise aux valeurs par défaut les compteurs temps.
       oldMillis=millis();
       currentMillis = millis();
