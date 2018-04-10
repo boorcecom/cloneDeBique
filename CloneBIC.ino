@@ -315,7 +315,6 @@ void loop(){
 
             
     if((hasEngTemp || hasExtTemp) && (currentMillis>(runningCycleTimeMS+refreshTime)) ) { // Nous devons rafraîchir l'affichage de la température !
-      delay(500);
       runningCycleTimeMS=millis();
       temp=newTemp; // On positionne la nouvelle température
       stmp[2]=temp;
