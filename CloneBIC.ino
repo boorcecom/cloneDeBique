@@ -48,12 +48,10 @@ bool hasEngTemp = true; // Positionner à true pour remonter la température mot
 bool hasExtTemp = true; // Positionner à true pour remonter la température extérieur, false sinon.
 
 // Ici on paramètre combiens de temps on veux voir les températures (cas avec 2 température à true):
-unsigned int CycleDurationMS=10000; // Environ 10s d'affichage 
-unsigned int refreshTime=1000; // Temps entre 2 affichage
+unsigned long CycleDurationMS=10000; // Environ 10s d'affichage 
+unsigned long refreshTime=1000; // Temps entre 2 affichage
 
 /* Variables pour le fonctionnement de l'applicaiton */
-// Gestion du temps de réinitialisation de l'affichage de température.
-const unsigned int waitReinitTempMS=10; // 10ms d'attente. 
 
 unsigned long currentMillis=0;
 unsigned long oldMillis=0;
@@ -84,27 +82,24 @@ void setup(){
 }
 
 void menuConfig(){
-  Serial.println("######################################################################");
   Serial.println("Welcome in the CloneDeBique configuration interface.");
-  Serial.println("Each option will be reviewed.");
-  Serial.println("For activable functions, press + to activate, or - to unactivate (Enter to pass)");
+  Serial.println("For activable functions, press + to activate, or - to unactivate");
   Serial.println("For value options, as times, enter numerical data.");
-  Serial.println("######################################################################");
-  hasEco2=serialSelectableOption("Activate eco² information forwarding ?",hasEco2);
-  hasExtTemp=serialSelectableOption("Activate External temperatur forwarding ?",hasExtTemp);
-  hasEngTemp=serialSelectableOption("Activate Engin temp as external temperature forwarding ?",hasEngTemp);
-  hasClim=serialSelectableOption("Activate automatic climatisation information forwarding ?",hasClim);
+  hasEco2=serialSelectableOption("Activate eco² info forwarding ?",hasEco2);
+  hasExtTemp=serialSelectableOption("Activate External temp forwarding ?",hasExtTemp);
+  hasEngTemp=serialSelectableOption("Activate Engin temp as external temp forwarding ?",hasEngTemp);
+  hasClim=serialSelectableOption("Activate automatic clim info forwarding ?",hasClim);
   Serial.println("The next value are timing values in ms.");
-  Serial.println("The first one defines the time eatch temperature is displayed (engine, exterior, etc.) : 10s by default");
+  Serial.println("The first one defines the time eatch temp is displayed (engine, exterior, etc.) : 10s by default");
   Serial.println("The second one defines the time of refresh for one temperature, 1s by default");
-  unsigned int initialList[4]={5000,10000,20000,40000};
+  unsigned long initialList[4]={5000,10000,20000,40000};
   CycleDurationMS=serialGetNewUIntValue("When on or more temperature are activated, time (in ms) one temp stays displayed before switching to the other one.",CycleDurationMS,initialList);
   initialList[0]=250;initialList[1]=500;initialList[2]=1000;initialList[3]=2000;
   refreshTime=serialGetNewUIntValue("Time (in ms) before CloneDeBique send the next temperature value (buffering) (< to time between to different temperature source)",refreshTime,initialList);
   Serial.println("saving configuration....");
   EEPROM.write(0,100);
-  eepromWriteUInt(3,CycleDurationMS);
-  eepromWriteUInt(7,refreshTime);
+  eepromWriteULong(3,CycleDurationMS);
+  eepromWriteULong(7,refreshTime);
   byte writeData = B00000000;
   if(hasEco2) {
     writeData = writeData | B00000001;
@@ -145,7 +140,7 @@ bool serialSelectableOption(char *question, bool actualValue) {
   }
 }
 
-unsigned long serialGetNewUIntValue(char *question, unsigned int actualValue,unsigned int inputChoice[4]) {
+unsigned long serialGetNewUIntValue(char *question, unsigned long actualValue,unsigned long inputChoice[4]) {
   Serial.print(question);
   Serial.print(" (");
   Serial.print(actualValue);
@@ -174,8 +169,29 @@ unsigned long serialGetNewUIntValue(char *question, unsigned int actualValue,uns
   }  
 }
 
-//write word to EEPROM
- void eepromWriteUInt(int address, unsigned int value) 
+unsigned long eepromReadULong(int address)
+{
+ //use word read function for reading upper part
+ unsigned long dword = eepromReadUInt(address);
+ //shift read word up
+ dword = dword << 16;
+ // read lower word from EEPROM and OR it into double word
+ dword = dword | eepromReadUInt(address+2);
+ return dword;
+}
+
+void eepromWriteULong(int address, unsigned long value)
+{
+ //truncate upper part and write lower part into EEPROM
+ eepromWriteUInt(address+2, word(value));
+ //shift upper part down
+ value = value >> 16;
+ //truncate and write
+ eepromWriteUInt(address, word(value));
+}
+
+
+void eepromWriteUInt(int address, unsigned int value) 
 {
    EEPROM.write(address,highByte(value));
    EEPROM.write(address+1 ,lowByte(value));
@@ -190,8 +206,8 @@ unsigned int eepromReadUInt(int address)
 void loadConfiguration() {
   if(EEPROM.read(0)!=100) {
     EEPROM.write(0,100);
-    eepromWriteUInt(3,CycleDurationMS);
-    eepromWriteUInt(7,refreshTime);
+    eepromWriteULong(3,CycleDurationMS);
+    eepromWriteULong(7,refreshTime);
     byte writeData = B00000000;
     if(hasEco2) {
       writeData = writeData | B00000001;
@@ -208,8 +224,8 @@ void loadConfiguration() {
     EEPROM.write(1,writeData);
     EEPROM.write(2,0);
   }
-  CycleDurationMS=eepromReadUInt(3);
-  refreshTime=eepromReadUInt(7);
+  CycleDurationMS=eepromReadULong(3);
+  refreshTime=eepromReadULong(7);
   byte readData=EEPROM.read(1);
   hasEco2=((readData & B00000001)==B00000001);
   hasExtTemp=((readData & B00000010)==B00000010);
@@ -299,9 +315,6 @@ void loop(){
         
     if((hasEngTemp || hasExtTemp) && (currentMillis-runningCycleTimeMS>refreshTime) ) { // Nous devons rafraîchir l'affichage de la température !
       runningCycleTimeMS=millis();
-      stmp[2]=0xFF;
-      CAN2.sendMsgBuf(0x558, 0, 8, stmp); // On envoie la réinitialisation.
-      delay(waitReinitTempMS);
       temp=newTemp; // On positionne la nouvelle température
       stmp[2]=temp;
       CAN2.sendMsgBuf(0x558, 0, 8, stmp);    // On envoie la température au MediaNav.
