@@ -48,7 +48,7 @@ bool hasEngTemp = true; // Positionner à true pour remonter la température mot
 bool hasExtTemp = true; // Positionner à true pour remonter la température extérieur, false sinon.
 
 // Ici on paramètre combiens de temps on veux voir les températures (cas avec 2 température à true):
-unsigned long CycleDurationMS=10000; // Environ 10s d'affichage 
+unsigned long cycleDurationMS=10000; // Environ 10s d'affichage 
 unsigned long refreshTime=1000; // Temps entre 2 affichage
 
 /* Variables pour le fonctionnement de l'applicaiton */
@@ -61,7 +61,8 @@ unsigned long beginCycleTimeMS = 0;
 unsigned long runningCycleTimeMS = 0;
 
 // Variables liées à l'affichage des températures.
-unsigned int temp = 0x7F;
+unsigned int actualSource = 0;
+bool sourceChanged = true;
 unsigned int newTemp= 0x7F;
 unsigned int engTemp = 0x7F;
 unsigned int extTemp = 0x7F;
@@ -82,23 +83,23 @@ void setup(){
 }
 
 void menuConfig(){
-  Serial.println("Welcome in the CloneDeBique configuration interface.");
-  Serial.println("For activable functions, press + to activate, or - to unactivate");
-  Serial.println("For value options, as times, enter numerical data.");
+  Serial.println(F("Welcome in the CloneDeBique configuration interface."));
+  Serial.println(F("For activable functions, press + to activate, or - to unactivate"));
+  Serial.println(F("For value options, as times, enter numerical data."));
   hasEco2=serialSelectableOption("Activate eco² info forwarding ?",hasEco2);
   hasExtTemp=serialSelectableOption("Activate External temp forwarding ?",hasExtTemp);
   hasEngTemp=serialSelectableOption("Activate Engin temp as external temp forwarding ?",hasEngTemp);
   hasClim=serialSelectableOption("Activate automatic clim info forwarding ?",hasClim);
-  Serial.println("The next value are timing values in ms.");
-  Serial.println("The first one defines the time eatch temp is displayed (engine, exterior, etc.) : 10s by default");
-  Serial.println("The second one defines the time of refresh for one temperature, 1s by default");
+  Serial.println(F("The next value are timing values in ms."));
+  Serial.println(F("The first one defines the time eatch temp is displayed (engine, exterior, etc.) : 10s by default"));
+  Serial.println(F("The second one defines the time of refresh for one temperature, 1s by default"));
   unsigned long initialList[4]={5000,10000,20000,40000};
-  CycleDurationMS=serialGetNewUIntValue("When on or more temperature are activated, time (in ms) one temp stays displayed before switching to the other one.",CycleDurationMS,initialList);
+  cycleDurationMS=serialGetNewUIntValue("When on or more temperature are activated, time (in ms) one temp stays displayed before switching to the other one.",cycleDurationMS,initialList);
   initialList[0]=250;initialList[1]=500;initialList[2]=1000;initialList[3]=2000;
   refreshTime=serialGetNewUIntValue("Time (in ms) before CloneDeBique send the next temperature value (buffering) (< to time between to different temperature source)",refreshTime,initialList);
-  Serial.println("saving configuration....");
+  Serial.println(F("saving configuration...."));
   EEPROM.write(0,100);
-  eepromWriteULong(3,CycleDurationMS);
+  eepromWriteULong(3,cycleDurationMS);
   eepromWriteULong(7,refreshTime);
   byte writeData = B00000000;
   if(hasEco2) {
@@ -115,7 +116,7 @@ void menuConfig(){
   }
   EEPROM.write(1,writeData);
   EEPROM.write(2,0);
-  Serial.println("Configuration saved, running in BIC mode now");
+  Serial.println(F("Configuration saved, running in BIC mode now"));
   Serial.flush();
   Serial.read();  
 }
@@ -123,9 +124,9 @@ void menuConfig(){
 bool serialSelectableOption(char *question, bool actualValue) {
   Serial.print(question);
   if(actualValue) {
-    Serial.println("(Activated)");
+    Serial.println(F("(Activated)"));
   } else {
-    Serial.println("(Desactivated)");
+    Serial.println(F("(Desactivated)"));
   }
   byte readChar=0;
   while(readChar!=43 && readChar!=45 && readChar!=13 ) {
@@ -142,10 +143,10 @@ bool serialSelectableOption(char *question, bool actualValue) {
 
 unsigned long serialGetNewUIntValue(char *question, unsigned long actualValue,unsigned long inputChoice[4]) {
   Serial.print(question);
-  Serial.print(" (");
+  Serial.print(F(" ("));
   Serial.print(actualValue);
-  Serial.println("ms).");
-  Serial.println("Choose value by pressing choice number (Enter to cancel) :");
+  Serial.println(F("ms)."));
+  Serial.println(F("Choose value by pressing choice number (Enter to cancel) :"));
   for(unsigned int counter=0;counter<4;counter++){
     if(inputChoice[counter]==actualValue) {
       Serial.print("*");
@@ -157,7 +158,7 @@ unsigned long serialGetNewUIntValue(char *question, unsigned long actualValue,un
     Serial.print(": ");
     Serial.println(inputChoice[counter]);
   }
-  Serial.println("Choice ? [1-4]");
+  Serial.println(F("Choice ? [1-4]"));
   byte readChar=0;
   while(!(readChar>48 && readChar<53) && readChar!=13 ) {
     readChar=Serial.read();
@@ -206,7 +207,7 @@ unsigned int eepromReadUInt(int address)
 void loadConfiguration() {
   if(EEPROM.read(0)!=100) {
     EEPROM.write(0,100);
-    eepromWriteULong(3,CycleDurationMS);
+    eepromWriteULong(3,cycleDurationMS);
     eepromWriteULong(7,refreshTime);
     byte writeData = B00000000;
     if(hasEco2) {
@@ -224,7 +225,7 @@ void loadConfiguration() {
     EEPROM.write(1,writeData);
     EEPROM.write(2,0);
   }
-  CycleDurationMS=eepromReadULong(3);
+  cycleDurationMS=eepromReadULong(3);
   refreshTime=eepromReadULong(7);
   byte readData=EEPROM.read(1);
   hasEco2=((readData & B00000001)==B00000001);
@@ -283,19 +284,15 @@ void loop(){
      Serial.flush();
      menuConfig();
    }
-    if(currentMillis<oldMillis) { // gestion de l'overflow de la fonction millis() : On réinitialise aux valeurs par défaut les compteurs temps.
+   
+   if(currentMillis<oldMillis) { // gestion de l'overflow de la fonction millis() : On réinitialise aux valeurs par défaut les compteurs temps.
       oldMillis=millis();
-      currentMillis = millis();
       beginCycleTimeMS=millis();
       runningCycleTimeMS=millis();      
     } else { // cas standard : préparation de la détection de l'overflow.
       oldMillis=currentMillis;      
-      currentMillis = millis();
     }
-    // Gestion du cycle d'affichage : Remise à 0 si on est à 2xdurée du cycle
-    if( (currentMillis > ((2*CycleDurationMS)+ beginCycleTimeMS)) && hasEngTemp && hasExtTemp) {
-          beginCycleTimeMS=millis();
-    }
+    currentMillis = millis();
 
     if(!digitalRead(interruptCAN1)) { // Une donnée sur CAN1 ?
       checkCAN1();
@@ -306,18 +303,48 @@ void loop(){
       checkCAN2();
     }
 */
+
+    // Gestion du cycle d'affichage : Remise à 0 si on est à 2xdurée du cycle
+    Serial.print(F("DEBUG : currentMillis :"));Serial.print(currentMillis);
+    Serial.print(F(" beginCycleTimeMS :"));Serial.print(beginCycleTimeMS);
+    Serial.print(F(" cycleDurationMS :"));Serial.print(cycleDurationMS);
+    Serial.println(F(" 2*cycleDurationMS :"));Serial.print(2*cycleDurationMS);
+    Serial.print(F(" beginCycleTimeMS+cycleDurationMS :"));Serial.print(beginCycleTimeMS+cycleDurationMS);
+    Serial.println(F(" beginCycleTimeMS+2*cycleDurationMS :"));Serial.print(beginCycleTimeMS+2*cycleDurationMS);
+    
+    if((currentMillis > (beginCycleTimeMS+2*cycleDurationMS)) && hasEngTemp && hasExtTemp) {
+      Serial.println(F("Into refresh beginCycleTimeMS (>2*cycleduration)"));delay(500);
+      beginCycleTimeMS=millis();
+    }
  
-    if(((currentMillis  < (CycleDurationMS+beginCycleTimeMS)) && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
+    if(((currentMillis  < (cycleDurationMS+beginCycleTimeMS)) && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
+      Serial.println(F("Into engin Temp (<cycleduration)"));delay(500);
+      if(actualSource!=0) {
+        Serial.println(F("Change Source to 0"));
+        actualSource=0;
+        sourceChanged=true;      
+      }
       newTemp = engTemp; // La nouvelle température est celle du moteur.
-    } else if(((currentMillis >(CycleDurationMS+beginCycleTimeMS)) && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
+    } else if(((currentMillis >(cycleDurationMS+beginCycleTimeMS)) && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
+      Serial.println(F("Into exterior Temp (>cycleduration)"));delay(500);
+      if(actualSource!=1) {
+        Serial.println(F("Change Source to 1"));
+        actualSource=1;
+        sourceChanged=true;      
+      }
       newTemp = extTemp; // La nouvelle température est celle de l'extérieur.                
     }
 
-            
     if((hasEngTemp || hasExtTemp) && (currentMillis>(runningCycleTimeMS+refreshTime)) ) { // Nous devons rafraîchir l'affichage de la température !
+      if(sourceChanged) {
+        Serial.println(F("source changed !")); delay(500);
+        stmp[2]=0xFF;
+        CAN2.sendMsgBuf(0x558, 0, 8, stmp);    // On envoie la réinitialisation au MediaNav.
+        delay(10);
+        sourceChanged=false;
+      }
       runningCycleTimeMS=millis();
-      temp=newTemp; // On positionne la nouvelle température
-      stmp[2]=temp;
+      stmp[2]=newTemp;
       CAN2.sendMsgBuf(0x558, 0, 8, stmp);    // On envoie la température au MediaNav.
     }
 }
