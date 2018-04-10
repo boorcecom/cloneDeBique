@@ -305,30 +305,19 @@ void loop(){
 */
 
     // Gestion du cycle d'affichage : Remise à 0 si on est à 2xdurée du cycle
-    Serial.print(F("DEBUG : currentMillis :"));Serial.print(currentMillis);
-    Serial.print(F(" beginCycleTimeMS :"));Serial.print(beginCycleTimeMS);
-    Serial.print(F(" cycleDurationMS :"));Serial.print(cycleDurationMS);
-    Serial.println(F(" 2*cycleDurationMS :"));Serial.print(2*cycleDurationMS);
-    Serial.print(F(" beginCycleTimeMS+cycleDurationMS :"));Serial.print(beginCycleTimeMS+cycleDurationMS);
-    Serial.println(F(" beginCycleTimeMS+2*cycleDurationMS :"));Serial.print(beginCycleTimeMS+2*cycleDurationMS);
     
     if((currentMillis > (beginCycleTimeMS+2*cycleDurationMS)) && hasEngTemp && hasExtTemp) {
-      Serial.println(F("Into refresh beginCycleTimeMS (>2*cycleduration)"));delay(500);
       beginCycleTimeMS=millis();
     }
  
     if(((currentMillis  < (cycleDurationMS+beginCycleTimeMS)) && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
-      Serial.println(F("Into engin Temp (<cycleduration)"));delay(500);
       if(actualSource!=0) {
-        Serial.println(F("Change Source to 0"));
         actualSource=0;
         sourceChanged=true;      
       }
       newTemp = engTemp; // La nouvelle température est celle du moteur.
     } else if(((currentMillis >(cycleDurationMS+beginCycleTimeMS)) && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
-      Serial.println(F("Into exterior Temp (>cycleduration)"));delay(500);
       if(actualSource!=1) {
-        Serial.println(F("Change Source to 1"));
         actualSource=1;
         sourceChanged=true;      
       }
@@ -337,7 +326,6 @@ void loop(){
 
     if((hasEngTemp || hasExtTemp) && (currentMillis>(runningCycleTimeMS+refreshTime)) ) { // Nous devons rafraîchir l'affichage de la température !
       if(sourceChanged) {
-        Serial.println(F("source changed !")); delay(500);
         stmp[2]=0xFF;
         CAN2.sendMsgBuf(0x558, 0, 8, stmp);    // On envoie la réinitialisation au MediaNav.
         delay(10);
