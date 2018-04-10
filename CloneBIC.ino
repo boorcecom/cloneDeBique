@@ -283,7 +283,7 @@ void loop(){
      Serial.flush();
      menuConfig();
    }
-    if(currentMillis<=oldMillis) { // gestion de l'overflow de la fonction millis() : On réinitialise aux valeurs par défaut les compteurs temps.
+    if(currentMillis<oldMillis) { // gestion de l'overflow de la fonction millis() : On réinitialise aux valeurs par défaut les compteurs temps.
       oldMillis=millis();
       currentMillis = millis();
       beginCycleTimeMS=millis();
@@ -293,7 +293,7 @@ void loop(){
       currentMillis = millis();
     }
     // Gestion du cycle d'affichage : Remise à 0 si on est à 2xdurée du cycle
-    if( ((currentMillis - beginCycleTimeMS)  > 2*CycleDurationMS) && hasEngTemp && hasExtTemp) {
+    if( (currentMillis > ((2*CycleDurationMS)+ beginCycleTimeMS)) && hasEngTemp && hasExtTemp) {
           beginCycleTimeMS=millis();
     }
 
@@ -307,13 +307,15 @@ void loop(){
     }
 */
  
-    if((((currentMillis - beginCycleTimeMS) < CycleDurationMS) && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
+    if(((currentMillis  < (CycleDurationMS+beginCycleTimeMS)) && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
       newTemp = engTemp; // La nouvelle température est celle du moteur.
-    } else if((((currentMillis- beginCycleTimeMS)  >CycleDurationMS) && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
+    } else if(((currentMillis >(CycleDurationMS+beginCycleTimeMS)) && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
       newTemp = extTemp; // La nouvelle température est celle de l'extérieur.                
     }
-        
-    if((hasEngTemp || hasExtTemp) && (currentMillis-runningCycleTimeMS>refreshTime) ) { // Nous devons rafraîchir l'affichage de la température !
+
+            
+    if((hasEngTemp || hasExtTemp) && (currentMillis>(runningCycleTimeMS+refreshTime)) ) { // Nous devons rafraîchir l'affichage de la température !
+      delay(500);
       runningCycleTimeMS=millis();
       temp=newTemp; // On positionne la nouvelle température
       stmp[2]=temp;
