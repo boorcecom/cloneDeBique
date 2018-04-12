@@ -61,8 +61,7 @@ unsigned long beginCycleTimeMS = 0;
 unsigned long runningCycleTimeMS = 0;
 
 // Variables liées à l'affichage des températures.
-unsigned int actualSource = 0;
-bool sourceChanged = true;
+unsigned int oldTemp = 0x7F;
 unsigned int newTemp= 0x7F;
 unsigned int engTemp = 0x7F;
 unsigned int extTemp = 0x7F;
@@ -93,9 +92,9 @@ void menuConfig(){
   Serial.println(F("The next value are timing values in ms."));
   Serial.println(F("The first one defines the time eatch temp is displayed (engine, exterior, etc.) : 10s by default"));
   Serial.println(F("The second one defines the time of refresh for one temperature, 1s by default"));
-  unsigned long initialList[4]={5000,10000,20000,40000};
+  unsigned long initialList[4]={10000,20000,30000,40000};
   cycleDurationMS=serialGetNewUIntValue("When on or more temperature are activated, time (in ms) one temp stays displayed before switching to the other one.",cycleDurationMS,initialList);
-  initialList[0]=250;initialList[1]=500;initialList[2]=1000;initialList[3]=2000;
+  initialList[0]=100;initialList[1]=2000;initialList[2]=3000;initialList[3]=4000;
   refreshTime=serialGetNewUIntValue("Time (in ms) before CloneDeBique send the next temperature value (buffering) (< to time between to different temperature source)",refreshTime,initialList);
   Serial.println(F("saving configuration...."));
   EEPROM.write(0,100);
@@ -311,27 +310,19 @@ void loop(){
     }
  
     if(((currentMillis  < (cycleDurationMS+beginCycleTimeMS)) && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
-      if(actualSource!=0) {
-        actualSource=0;
-        sourceChanged=true;      
-      }
       newTemp = engTemp; // La nouvelle température est celle du moteur.
     } else if(((currentMillis >(cycleDurationMS+beginCycleTimeMS)) && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
-      if(actualSource!=1) {
-        actualSource=1;
-        sourceChanged=true;      
-      }
       newTemp = extTemp; // La nouvelle température est celle de l'extérieur.                
     }
 
     if((hasEngTemp || hasExtTemp) && (currentMillis>(runningCycleTimeMS+refreshTime)) ) { // Nous devons rafraîchir l'affichage de la température !
-      if(sourceChanged) {
+      if(oldTemp!=newTemp) {
         stmp[2]=0xFF;
         CAN2.sendMsgBuf(0x558, 0, 8, stmp);    // On envoie la réinitialisation au MediaNav.
         delay(10);
-        sourceChanged=false;
       }
       runningCycleTimeMS=millis();
+      oldTemp=newTemp;
       stmp[2]=newTemp;
       CAN2.sendMsgBuf(0x558, 0, 8, stmp);    // On envoie la température au MediaNav.
     }
