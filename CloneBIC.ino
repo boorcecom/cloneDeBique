@@ -1,5 +1,8 @@
 #include <mcp_can.h>
 #include <EEPROM.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
 /*****************************************************************************
  *          Clone de bique !
  *          Application Arduino bridge CAN : 
@@ -10,7 +13,7 @@
 ******************************************************************************
   Pin 0 (RX) :                          Pin 1 (TX) : 
   Pin 2      : Interruption CAN1        Pin 3 (PMW): Interruption CAN2 
-  Pin 4      :                          Pin 5 (PMW): CAN1
+  Pin 4      : Interface Temp. Int.     Pin 5 (PMW): CAN1
   Pin 6 (PMW):                          Pin 7      :
   Pin 8      :                          Pin 9 (PMW):
   Pin 10(PMW): CAN2                     Pin 11(PWM): CAN SPI MOSI (SI sur cartes CAN)
@@ -37,6 +40,10 @@ const int interruptCAN1 = 2; // Port 2 pour interruption DATA CAN1
 const int interruptCAN2 = 3; // Port 3 pour interruption DATA CAN2
 const int portCAN1 = 5; // Le CAN1 (véhicule) est sur le port 5
 const int portCAN2 = 10;// Le CAN2 (véhicule) est sur le port 10
+const int oneWireTemp = 4;
+
+/* Version pour la configuration */
+const byte cdbVersion=101;
 
 /* paramètre application */
 /* activation/désactivation de fonctions */
@@ -46,6 +53,7 @@ bool hasClim = true; // Positionner a true pour activer remontée clim, si non a
 // suivant le paramètre  CycleDurationMS
 bool hasEngTemp = true; // Positionner à true pour remonter la température moteur, false sinon.
 bool hasExtTemp = true; // Positionner à true pour remonter la température extérieur, false sinon.
+bool hasIntTemp = false; // Positionner à true pour remonter la température intérieur via OneWire, false sinon.
 
 // Ici on paramètre combiens de temps on veux voir les températures (cas avec 2 température à true):
 unsigned long cycleDurationMS=10000; // Environ 10s d'affichage 
@@ -60,11 +68,20 @@ unsigned long oldMillis=0;
 unsigned long beginCycleTimeMS = 0;
 unsigned long runningCycleTimeMS = 0;
 
+
 // Variables liées à l'affichage des températures.
 unsigned int oldTemp = 0x7F;
 unsigned int newTemp= 0x7F;
 unsigned int engTemp = 0x7F;
 unsigned int extTemp = 0x7F;
+unsigned int intTemp = 0x7F;
+
+unsigned long numberTempSource=1;
+unsigned int tempCounter=0;
+unsigned int tempArray[3] = { 0x7F, 0x7F, 0x7F };
+
+OneWire OneWire(oneWireTemp);//capteur de température 4
+DallasTemperature sensors(&OneWire);
 
 // Variables liées au CAN
 unsigned char stmp[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // Modèle de message
@@ -88,6 +105,7 @@ void menuConfig(){
   hasEco2=serialSelectableOption("Activate eco² info forwarding ?",hasEco2);
   hasExtTemp=serialSelectableOption("Activate External temp forwarding ?",hasExtTemp);
   hasEngTemp=serialSelectableOption("Activate Engin temp as external temp forwarding ?",hasEngTemp);
+  hasIntTemp=serialSelectableOption("Activate Internal Vehicule temp (external sensor on pin 4) as external temp forwarding ?",hasIntTemp);
   hasClim=serialSelectableOption("Activate automatic clim info forwarding ?",hasClim);
   Serial.println(F("The next value are timing values in ms."));
   Serial.println(F("The first one defines the time eatch temp is displayed (engine, exterior, etc.) : 10s by default"));
@@ -97,7 +115,7 @@ void menuConfig(){
   initialList[0]=100;initialList[1]=2000;initialList[2]=3000;initialList[3]=4000;
   refreshTime=serialGetNewUIntValue("Time (in ms) before CloneDeBique send the next temperature value (buffering) (< to time between to different temperature source)",refreshTime,initialList);
   Serial.println(F("saving configuration...."));
-  EEPROM.write(0,100);
+  EEPROM.write(0,cdbVersion);
   eepromWriteULong(3,cycleDurationMS);
   eepromWriteULong(7,refreshTime);
   byte writeData = B00000000;
@@ -113,11 +131,15 @@ void menuConfig(){
   if(hasClim) {
     writeData = writeData | B00001000;
   }
+  if(hasIntTemp) {
+    writeData = writeData | B00010000;
+  }  
   EEPROM.write(1,writeData);
   EEPROM.write(2,0);
   Serial.println(F("Configuration saved, running in BIC mode now"));
   Serial.flush();
-  Serial.read();  
+  Serial.read();
+  loadConfiguration();  
 }
 
 bool serialSelectableOption(char *question, bool actualValue) {
@@ -204,8 +226,8 @@ unsigned int eepromReadUInt(int address)
 }
 
 void loadConfiguration() {
-  if(EEPROM.read(0)!=100) {
-    EEPROM.write(0,100);
+  if(EEPROM.read(0)!=cdbVersion AND EEPROM.read(0)!=cdbVersion-1) {
+    EEPROM.write(0,cdbVersion);
     eepromWriteULong(3,cycleDurationMS);
     eepromWriteULong(7,refreshTime);
     byte writeData = B00000000;
@@ -221,9 +243,12 @@ void loadConfiguration() {
     if(hasClim) {
       writeData = writeData | B00001000;
     }
+    if(hasIntTemp) {
+      writeData = writeData | B00010000;
+    }  
     EEPROM.write(1,writeData);
     EEPROM.write(2,0);
-  }
+  } 
   cycleDurationMS=eepromReadULong(3);
   refreshTime=eepromReadULong(7);
   byte readData=EEPROM.read(1);
@@ -231,6 +256,14 @@ void loadConfiguration() {
   hasExtTemp=((readData & B00000010)==B00000010);
   hasEngTemp=((readData & B00000100)==B00000100);
   hasClim=((readData & B00001000)==B00001000);
+  hasIntTemp=((readData & B00010000)==B00010000);
+  if(hasExtTemp&&hasEngTemp&&hasIntTemp) {
+    numberTempSource=3;
+  } else if ((!hasExtTemp&&hasEngTemp&&hasIntTemp)||(hasExtTemp&&!hasEngTemp&&hasIntTemp)||(hasExtTemp&&hasEngTemp&&!hasIntTemp)) {
+    numberTempSource=2;
+  } else {
+    numberTempSource=1;
+  }
 }
 
 void checkCAN1()
@@ -297,23 +330,32 @@ void loop(){
       checkCAN1();
     }
 
+    if(hasIntTemp) {
+      intTemp=sensors.getTempCByIndex(0))+40;
+    }
+    
 /* Non utilisé pour le moment    
     if(!digitalRead(interruptCAN2)) { // Une donnée sur CAN2 ?
       checkCAN2();
     }
 */
 
-    // Gestion du cycle d'affichage : Remise à 0 si on est à 2xdurée du cycle
+    // Gestion du cycle d'affichage : Remise à 0 si on est à X * durée du cycle
     
-    if((currentMillis > (beginCycleTimeMS+2*cycleDurationMS)) && hasEngTemp && hasExtTemp) {
+    if((currentMillis > (beginCycleTimeMS+numberTempSource*cycleDurationMS)) && hasEngTemp && hasExtTemp) {
       beginCycleTimeMS=millis();
     }
  
-    if(((currentMillis  < (cycleDurationMS+beginCycleTimeMS)) && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
+/*    if(((currentMillis  < (cycleDurationMS+beginCycleTimeMS)) && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
       newTemp = engTemp; // La nouvelle température est celle du moteur.
     } else if(((currentMillis >(cycleDurationMS+beginCycleTimeMS)) && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
       newTemp = extTemp; // La nouvelle température est celle de l'extérieur.                
-    }
+    }*/
+    if((currentMillis  < (cycleDurationMS+beginCycleTimeMS)||) {
+      newTemp=tempArray[0];
+    } else if ((currentMillis  => ((tempCounter)*cycleDurationMS+beginCycleTimeMS))&&(currentMillis  < ((tempCounter+1)*cycleDurationMS+beginCycleTimeMS))) {
+      newTemp=tempArray[tempCounter];
+    } 
 
     if((hasEngTemp || hasExtTemp) && (currentMillis>(runningCycleTimeMS+refreshTime)) ) { // Nous devons rafraîchir l'affichage de la température !
       if(oldTemp!=newTemp) {
