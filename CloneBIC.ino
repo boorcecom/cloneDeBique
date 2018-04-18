@@ -72,9 +72,6 @@ unsigned long runningCycleTimeMS = 0;
 // Variables liées à l'affichage des températures.
 unsigned int oldTemp = 0x7F;
 unsigned int newTemp= 0x7F;
-unsigned int engTemp = 0x7F;
-unsigned int extTemp = 0x7F;
-unsigned int intTemp = 0x7F;
 
 unsigned long numberTempSource=1;
 unsigned int tempCounter=0;
