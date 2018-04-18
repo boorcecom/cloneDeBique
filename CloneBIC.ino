@@ -275,16 +275,18 @@ void checkCAN1()
         CAN1.readMsgBuf(&len, rxBuf); // Lire les données: len = longueur des données, rxBuf = data des données        
         rxId = CAN1.getCanId(); // Récupère l'identifiant du message
         
-        if(rxId == 0x5DA && hasEngTemp ){  // Récupération de la température moteur.
-            if(rxBuf[0]!=0xFF) {
-              engTemp=rxBuf[0]; // On stock pour traitement ultérieur !
+        if(hasEngTemp)  {
+          if(rxId == 0x5DA && rxBuf[0]!=0xFF){  // Récupération de la température moteur.
+              tempArray[tempCounter]=rxBuf[0]; // On stock pour traitement ultérieur ! 
             }
+          tempCounter++;
         }
         
-        if(rxId == 0x3B7 && hasExtTemp){ // Récupération de la température exterieur.
-            if(rxBuf[0]!=0xFF) {
-              extTemp=rxBuf[0]; // On stock pour traitement ultérieur !
+        if(hasExtTemp) {
+            if(rxId == 0x3B7 && rxBuf[0]!=0xFF){ // Récupération de la température exterieur.
+              tempArray[tempCounter]=rxBuf[0]; // On stock pour traitement ultérieur !            
             }
+          tempCounter++;
         }    
         
         // Envoyer les données Driving ECO2
@@ -310,7 +312,7 @@ void checkCAN2() // Non utilisé pour le moment !
 }
 */
 void loop(){
-  
+   tempCounter=0
    if(Serial.available()>0) {
      Serial.read();
      Serial.flush();
@@ -328,10 +330,18 @@ void loop(){
 
     if(!digitalRead(interruptCAN1)) { // Une donnée sur CAN1 ?
       checkCAN1();
+    } else { // Nous devons quand même faire "courir" le compteur de relevés de températures.
+      if(hasExtTemp) {
+        tempCounter++;
+      }
+      if(hasEngTemp) {
+        tempCounter++;
+      }      
     }
 
     if(hasIntTemp) {
-      intTemp=sensors.getTempCByIndex(0))+40;
+      tempArray[tempCounter]=sensors.getTempCByIndex(0))+40;
+      tempCounter++;
     }
     
 /* Non utilisé pour le moment    
@@ -342,22 +352,16 @@ void loop(){
 
     // Gestion du cycle d'affichage : Remise à 0 si on est à X * durée du cycle
     
-    if((currentMillis > (beginCycleTimeMS+numberTempSource*cycleDurationMS)) && hasEngTemp && hasExtTemp) {
+    if(currentMillis > (beginCycleTimeMS+numberTempSource*cycleDurationMS)) {
       beginCycleTimeMS=millis();
     }
  
-/*    if(((currentMillis  < (cycleDurationMS+beginCycleTimeMS)) && hasEngTemp) || (hasEngTemp && !hasExtTemp)) { // Si nous sommes sous la durée du cycle paramétré :
-      newTemp = engTemp; // La nouvelle température est celle du moteur.
-    } else if(((currentMillis >(cycleDurationMS+beginCycleTimeMS)) && hasExtTemp) || (!hasEngTemp && hasExtTemp)) {  // Si non
-      newTemp = extTemp; // La nouvelle température est celle de l'extérieur.                
-    }*/
-    if((currentMillis  < (cycleDurationMS+beginCycleTimeMS)||) {
-      newTemp=tempArray[0];
-    } else if ((currentMillis  => ((tempCounter)*cycleDurationMS+beginCycleTimeMS))&&(currentMillis  < ((tempCounter+1)*cycleDurationMS+beginCycleTimeMS))) {
-      newTemp=tempArray[tempCounter];
-    } 
+    // Récupération de la température correspondant au moment du cycle où nous sommes.
+    int tempIndex=currentMillis-beginCycleTimeMS;
+    tempIndex=abs(tempIndex)/cycleDurationMS;
+    newTemp=tempArray[tempIndex]; 
 
-    if((hasEngTemp || hasExtTemp) && (currentMillis>(runningCycleTimeMS+refreshTime)) ) { // Nous devons rafraîchir l'affichage de la température !
+    if((numberTempSource>0) && (currentMillis>(runningCycleTimeMS+refreshTime)) ) { // Nous devons rafraîchir l'affichage de la température !
       if(oldTemp!=newTemp) {
         stmp[2]=0xFF;
         CAN2.sendMsgBuf(0x558, 0, 8, stmp);    // On envoie la réinitialisation au MediaNav.
