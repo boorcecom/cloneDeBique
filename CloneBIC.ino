@@ -109,7 +109,7 @@ void menuConfig(){
   Serial.println(F("The second one defines the time of refresh for one temperature, 1s by default"));
   unsigned long initialList[4]={10000,20000,30000,40000};
   cycleDurationMS=serialGetNewUIntValue("When on or more temperature are activated, time (in ms) one temp stays displayed before switching to the other one.",cycleDurationMS,initialList);
-  initialList[0]=100;initialList[1]=2000;initialList[2]=3000;initialList[3]=4000;
+  initialList[0]=500;initialList[1]=1000;initialList[2]=1500;initialList[3]=2000;
   refreshTime=serialGetNewUIntValue("Time (in ms) before CloneDeBique send the next temperature value (buffering) (< to time between to different temperature source)",refreshTime,initialList);
   Serial.println(F("saving configuration...."));
   EEPROM.write(0,cdbVersion);
@@ -223,7 +223,7 @@ unsigned int eepromReadUInt(int address)
 }
 
 void loadConfiguration() {
-  if(EEPROM.read(0)!=cdbVersion AND EEPROM.read(0)!=cdbVersion-1) {
+  if((EEPROM.read(0)!=cdbVersion)&&(EEPROM.read(0)!=cdbVersion-1)) {
     EEPROM.write(0,cdbVersion);
     eepromWriteULong(3,cycleDurationMS);
     eepromWriteULong(7,refreshTime);
@@ -254,12 +254,15 @@ void loadConfiguration() {
   hasEngTemp=((readData & B00000100)==B00000100);
   hasClim=((readData & B00001000)==B00001000);
   hasIntTemp=((readData & B00010000)==B00010000);
-  if(hasExtTemp&&hasEngTemp&&hasIntTemp) {
-    numberTempSource=3;
-  } else if ((!hasExtTemp&&hasEngTemp&&hasIntTemp)||(hasExtTemp&&!hasEngTemp&&hasIntTemp)||(hasExtTemp&&hasEngTemp&&!hasIntTemp)) {
-    numberTempSource=2;
-  } else {
-    numberTempSource=1;
+  numberTempSource=0;
+  if(hasExtTemp) {
+    numberTempSource++;
+  } 
+  if (hasEngTemp) {
+    numberTempSource++;
+  } 
+  if(hasEngTemp) {
+    numberTempSource++;
   }
 }
 
@@ -309,7 +312,7 @@ void checkCAN2() // Non utilisé pour le moment !
 }
 */
 void loop(){
-   tempCounter=0
+   tempCounter=0;
    if(Serial.available()>0) {
      Serial.read();
      Serial.flush();
@@ -337,7 +340,7 @@ void loop(){
     }
 
     if(hasIntTemp) {
-      tempArray[tempCounter]=sensors.getTempCByIndex(0))+40;
+      tempArray[tempCounter]=sensors.getTempCByIndex(0)+40;
       tempCounter++;
     }
     
