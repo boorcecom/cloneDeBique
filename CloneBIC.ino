@@ -2,6 +2,8 @@
 #include <EEPROM.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Wire.h>
+#include <MPU6050.h>
 
 /*****************************************************************************
  *          Clone de bique !
@@ -20,7 +22,7 @@
   Pin 12     : CAN SPI MISO (SO sur CAN)Pin 13     : CAN SPI CLOCK (SCK sur cartes CAN)
   Pin 14 A0  :                          Pin 15 A1  :
   Pin 16 A2  :                          Pin 17 A3  :
-  Pin 18 A4  :                          Pin 19 A5  : 
+  Pin 18 A4  :  TWI/I2C SDA (MPU6050)   Pin 19 A5  : TWI/I2C SCL (MPU6050) 
 ******************************************************************************
   Pour le CAN1 : Le CANH est reliée au port 6 de l'ODB2
   Pour le CAN1 : Le CANL est reliée au port 14 de l'ODB2
@@ -43,7 +45,7 @@ const int portCAN2 = 10;// Le CAN2 (véhicule) est sur le port 10
 const int oneWireTemp = 4;
 
 /* Version pour la configuration */
-const byte cdbVersion=101;
+const byte cdbVersion=102;
 
 /* paramètre application */
 /* activation/désactivation de fonctions */
@@ -54,6 +56,8 @@ bool hasClim = true; // Positionner a true pour activer remontée clim, si non a
 bool hasEngTemp = true; // Positionner à true pour remonter la température moteur, false sinon.
 bool hasExtTemp = true; // Positionner à true pour remonter la température extérieur, false sinon.
 bool hasIntTemp = false; // Positionner à true pour remonter la température intérieur via OneWire, false sinon.
+bool hasExtInfo4x4 = false; // Si on a un MPU6050
+
 
 // Ici on paramètre combiens de temps on veux voir les températures (cas avec 2 température à true):
 unsigned long cycleDurationMS=10000; // Environ 10s d'affichage 
@@ -80,6 +84,8 @@ unsigned int tempArray[3] = { 0x7F, 0x7F, 0x7F };
 OneWire OneWire(oneWireTemp);//capteur de température 4
 DallasTemperature sensors(&OneWire);
 
+MPU6050 mpu;
+
 // Variables liées au CAN
 unsigned char stmp[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // Modèle de message
 MCP_CAN CAN1(portCAN1); // Définit CS broche 5 pour can1
@@ -93,6 +99,10 @@ void setup(){
     CAN1.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
     CAN2.begin(CAN_500KBPS, MCP_8MHz); // init can bus : baudrate = 500k / 8MHz
     loadConfiguration();
+    if(hasExtInfo4x4) {
+      mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G);
+    }
+    
 }
 
 void menuConfig(){
@@ -104,6 +114,7 @@ void menuConfig(){
   hasEngTemp=serialSelectableOption("Activate Engin temp as external temp forwarding ?",hasEngTemp);
   hasIntTemp=serialSelectableOption("Activate Internal Vehicule temp (external sensor on pin 4) as external temp forwarding ?",hasIntTemp);
   hasClim=serialSelectableOption("Activate automatic clim info forwarding ?",hasClim);
+  hasExtInfo4x4=serialSelectableOption("Activate 4x4 Informations from MPU6050 ?",hasExtInfo4x4);
   Serial.println(F("The next value are timing values in ms."));
   Serial.println(F("The first one defines the time eatch temp is displayed (engine, exterior, etc.) : 10s by default"));
   Serial.println(F("The second one defines the time of refresh for one temperature, 1s by default"));
@@ -130,7 +141,10 @@ void menuConfig(){
   }
   if(hasIntTemp) {
     writeData = writeData | B00010000;
-  }  
+  }
+  if(hasExtInfo4x4) {
+    writeData = writeData | B00100000;
+  }   
   EEPROM.write(1,writeData);
   EEPROM.write(2,0);
   Serial.println(F("Configuration saved, running in BIC mode now"));
@@ -223,7 +237,23 @@ unsigned int eepromReadUInt(int address)
 }
 
 void loadConfiguration() {
-  if((EEPROM.read(0)!=cdbVersion)&&(EEPROM.read(0)!=cdbVersion-1)) {
+  byte readData=0x0;
+  // Upgrades si l'on viens d'une version antérieur.
+  if(EEPROM.read(0)==100) { // En provenance d'une 100
+    readData=EEPROM.read(1);
+    readData=readData & B00001111;
+    EEPROM.write(1,readData);
+    EEPROM.write(0,102);
+  }
+  if(EEPROM.read(0)==101) { // En provenance d'une 101
+    readData=EEPROM.read(1);
+    readData=readData & B00011111;
+    EEPROM.write(1,readData);
+    EEPROM.write(0,102);
+  }
+
+  // Si la configuration n'est pas initialisée, on positionne TOUT par défaut
+  if(EEPROM.read(0)!=cdbVersion) {
     EEPROM.write(0,cdbVersion);
     eepromWriteULong(3,cycleDurationMS);
     eepromWriteULong(7,refreshTime);
@@ -242,18 +272,23 @@ void loadConfiguration() {
     }
     if(hasIntTemp) {
       writeData = writeData | B00010000;
-    }  
+    }
+    if(hasExtInfo4x4) {
+      writeData = writeData | B00100000;
+    }
     EEPROM.write(1,writeData);
     EEPROM.write(2,0);
   } 
   cycleDurationMS=eepromReadULong(3);
   refreshTime=eepromReadULong(7);
-  byte readData=EEPROM.read(1);
+  readData=EEPROM.read(1);
   hasEco2=((readData & B00000001)==B00000001);
   hasExtTemp=((readData & B00000010)==B00000010);
   hasEngTemp=((readData & B00000100)==B00000100);
   hasClim=((readData & B00001000)==B00001000);
   hasIntTemp=((readData & B00010000)==B00010000);
+  hasExtInfo4x4=((readData & B00100000)==B00100000);
+
   numberTempSource=0;
   if(hasExtTemp) {
     numberTempSource++;
@@ -371,5 +406,30 @@ void loop(){
       oldTemp=newTemp;
       stmp[2]=newTemp;
       CAN2.sendMsgBuf(0x558, 0, 8, stmp);    // On envoie la température au MediaNav.
+      stmp[2]=0x00;
+    }
+    
+    if(hasExtInfo4x4) {  // Gestion des infos 4x4 à partir d'un MPU6050
+      
+      Vector normAccel = mpu.readNormalizeAccel();
+  
+      int pitch = -(atan2(normAccel.XAxis, sqrt(normAccel.YAxis*normAccel.YAxis + normAccel.ZAxis*normAccel.ZAxis))*180.0)/M_PI;
+      int roll = (atan2(normAccel.YAxis, normAccel.ZAxis)*180.0)/M_PI;
+      
+      if(roll>30)
+          roll=30;
+      if(pitch>20)
+          pitch=20;
+            
+      if(roll<-30)
+          roll=-30;
+      if(pitch<-20)
+          pitch=-20;
+      
+      stmp[0]=0x78+roll*2;
+      stmp[1]=0x78+pitch*2;
+      CAN2.sendMsgBuf(0x407, 0, 8, stmp);
+      stmp[0]=0x00;
+      stmp[1]=0x00;
     }
 }
